@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class HomeScreen extends StatefulWidget {
   final Map<String, dynamic>? userData;
@@ -12,7 +13,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _isBalanceVisible = false;
-  int _selectedBottomNavIndex = 0; // Trạng thái tab đang chọn
+  int _selectedBottomNavIndex = 0;
+  bool _isLoadingBalance = false;
 
   final PageController _bannerPageController = PageController(
     viewportFraction: 0.75,
@@ -31,6 +33,36 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _startBannerTimer();
+  }
+
+  // Hàm gọi trực tiếp vào Database Supabase để lấy số dư mới nhất
+  Future<void> _fetchLatestBalance() async {
+    setState(() {
+      _isLoadingBalance = true;
+    });
+
+    try {
+      final accountNumber = widget.userData?['account_number'];
+      var query = Supabase.instance.client.from('mb-bank').select();
+
+      final response = accountNumber != null
+          ? await query.eq('account_number', accountNumber).maybeSingle()
+          : await query.limit(1).maybeSingle();
+
+      if (response != null && mounted) {
+        setState(() {
+          widget.userData?['balance'] = response['balance']?.toString();
+          _isLoadingBalance = false;
+        });
+      } else {
+        setState(() => _isLoadingBalance = false);
+      }
+    } catch (e) {
+      debugPrint('Lỗi fetch số dư từ Supabase: $e');
+      if (mounted) {
+        setState(() => _isLoadingBalance = false);
+      }
+    }
   }
 
   void _startBannerTimer() {
@@ -80,13 +112,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F2B6B),
-      // Giúp giao diện hiển thị tràn bên dưới thanh navigation bar bo tròn
       extendBody: true,
-
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Ảnh Nền phủ nửa trên màn hình
           Positioned(
             top: 0,
             left: 0,
@@ -99,15 +128,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   Container(color: const Color(0xFF0F2B6B)),
             ),
           ),
-
-          // 2. Nội dung cuộn chính
           SafeArea(
             bottom: false,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 110), // Tránh bị thanh bottom bar che lấp
+              padding: const EdgeInsets.only(bottom: 110),
               child: Column(
                 children: [
-                  // ================= HEADER TOP =================
+                  // HEADER TOP
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16.0,
@@ -123,13 +150,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             fit: BoxFit.contain,
                             errorBuilder: (context, error, stackTrace) =>
                                 const Text(
-                                  'MB',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                              'MB',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ),
                         Row(
@@ -142,10 +169,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                 height: 32,
                                 errorBuilder: (context, error, stack) =>
                                     const Icon(
-                                      Icons.bug_report,
-                                      color: Colors.amber,
-                                      size: 24,
-                                    ),
+                                  Icons.bug_report,
+                                  color: Colors.amber,
+                                  size: 24,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -158,9 +185,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 fit: BoxFit.contain,
                                 errorBuilder: (context, error, stack) =>
                                     const Icon(
-                                      Icons.search,
-                                      color: Colors.white,
-                                    ),
+                                  Icons.search,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -173,9 +200,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 fit: BoxFit.contain,
                                 errorBuilder: (context, error, stack) =>
                                     const Icon(
-                                      Icons.notifications,
-                                      color: Colors.white,
-                                    ),
+                                  Icons.notifications,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -192,16 +219,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 12),
 
-                  // ================= AVATAR & THẺ SỐ DƯ =================
+                  // AVATAR & THẺ SỐ DƯ
                   Padding(
                     padding: const EdgeInsets.only(left: 35.0, right: 16.0),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Cụm Avatar & Badge
                         Column(
                           children: [
                             Image.asset(
@@ -211,9 +236,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               fit: BoxFit.contain,
                               errorBuilder: (context, error, stackTrace) =>
                                   const CircleAvatar(
-                                    radius: 30,
-                                    child: Icon(Icons.person, size: 30),
-                                  ),
+                                radius: 30,
+                                child: Icon(Icons.person, size: 30),
+                              ),
                             ),
                             const SizedBox(height: 6),
                             Image.asset(
@@ -225,9 +250,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ],
                         ),
-
                         const SizedBox(width: 34),
-                        // Thẻ Số Dư
                         Expanded(
                           child: Container(
                             decoration: BoxDecoration(
@@ -271,19 +294,32 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ],
                                       ),
                                       GestureDetector(
-                                        onTap: () {
+                                        onTap: () async {
+                                          if (!_isBalanceVisible) {
+                                            await _fetchLatestBalance();
+                                          }
                                           setState(() {
                                             _isBalanceVisible =
                                                 !_isBalanceVisible;
                                           });
                                         },
-                                        child: Icon(
-                                          _isBalanceVisible
-                                              ? Icons.visibility_outlined
-                                              : Icons.visibility_off_outlined,
-                                          color: const Color(0xFF00B2FF),
-                                          size: 18,
-                                        ),
+                                        child: _isLoadingBalance
+                                            ? const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: Color(0xFF00B2FF),
+                                                ),
+                                              )
+                                            : Icon(
+                                                _isBalanceVisible
+                                                    ? Icons.visibility_outlined
+                                                    : Icons
+                                                        .visibility_off_outlined,
+                                                color: const Color(0xFF00B2FF),
+                                                size: 18,
+                                              ),
                                       ),
                                     ],
                                   ),
@@ -348,7 +384,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // ================= KHUNG NỀN TRẮNG =================
+                  // KHUNG NỀN TRẮNG
                   Container(
                     width: double.infinity,
                     decoration: const BoxDecoration(
@@ -361,7 +397,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // CỤM TÍNH NĂNG NHANH
                         Stack(
                           clipBehavior: Clip.none,
                           alignment: Alignment.bottomCenter,
@@ -419,7 +454,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 36),
 
                         // BANNER SLIDER
@@ -472,7 +506,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             },
                           ),
                         ),
-
                         const SizedBox(height: 24),
 
                         // MUA SẮM - GIẢI TRÍ - ĐẦU TƯ
@@ -494,7 +527,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               const SizedBox(height: 16),
                               GridView.count(
                                 shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
+                                physics:
+                                    const NeverScrollableScrollPhysics(),
                                 crossAxisCount: 4,
                                 mainAxisSpacing: 8,
                                 crossAxisSpacing: 8,
@@ -554,19 +588,16 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-
-      // ================= BỔ SUNG: BOTTOM NAVIGATION BAR =================
       bottomNavigationBar: _buildBottomNavigationBar(),
     );
   }
 
-  // Widget Thanh Bottom Navigation Bar màu xanh bo tròn
   Widget _buildBottomNavigationBar() {
     return Container(
       margin: const EdgeInsets.only(left: 16, right: 16, bottom: 20),
       height: 72,
       decoration: BoxDecoration(
-        color: const Color(0xFF1652E0), // Màu xanh biển đặc trưng
+        color: const Color(0xFF1652E0),
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
@@ -589,7 +620,6 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icons.credit_card_rounded,
             label: 'Thẻ',
           ),
-          // Nút Quét QR nổi bật ở giữa
           _buildQRNavItem(),
           _buildNavItem(
             index: 2,
@@ -643,9 +673,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildQRNavItem() {
     return GestureDetector(
-      onTap: () {
-        // Xử lý sự kiện mở Camera Quét QR
-      },
+      onTap: () {},
       child: Container(
         width: 52,
         height: 52,
@@ -662,7 +690,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         child: Image.asset(
-          'assets/qr-code.png', // Thay thế bằng đường dẫn ảnh QR icon tương ứng
+          'assets/qr-code.png',
           fit: BoxFit.contain,
           errorBuilder: (context, error, stackTrace) => const Icon(
             Icons.qr_code_scanner_rounded,
